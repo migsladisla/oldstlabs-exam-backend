@@ -1,0 +1,30 @@
+{
+  "name": "oldst.labs",
+  "version": "1.0.0",
+  "description": "oldstlabs technical exam",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/migsladisla/oldstlabs-technical-exam.git"
+  },
+  "author": "Juan Miguel Ladisla",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/migsladisla/oldstlabs-technical-exam/issues"
+  },
+  "homepage": "https://github.com/migsladisla/oldstlabs-technical-exam#readme",
+  "devDependencies": {
+    "nodemon": "^2.0.6"
+  },
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1",
+    "jsonwebtoken": "^8.5.1",
+    "sqlite3": "^5.0.0"
+  }
+}
