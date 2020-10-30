@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const moment = require('moment');
 const sendRefreshToken = require('./jwt/sendRefreshToken');
 const validateRequest = require('./validationMiddleware');
 const { validationResult } = require('express-validator');
@@ -134,6 +135,40 @@ const routes = db => {
         });
     });
 
+    app.get('/api/profile/appointments', 
+        verifyToken,
+        validateRequest('userAppointments'),
+        (req, res) => {
+            const errors = validationResult(req);
+    
+            if (!errors.isEmpty()) {
+                return res.status(400).json({ errors: errors.array() });
+            }
+
+            let { start, end } = req.query;
+
+            if (typeof start !== 'undefined' && typeof end !== 'undefined') {
+                const range = [
+                    moment(start).utc().format('YYYY-MM-DD HH:mm:ss'),
+                    moment(end).utc().format('YYYY-MM-DD HH:mm:ss')
+                ]
+
+                db.all('SELECT * FROM appointments WHERE start_date >= ? and end_date <= ?', 
+                    range, 
+                    (err, appointments) => {
+                        if (err) return res.sendStatus(500);
+        
+                        return res.json(appointments);
+                });
+            } else {
+                db.all('SELECT * FROM appointments', (err, appointments) => {
+                    if (err) return res.sendStatus(500);
+    
+                    return res.json(appointments);
+                });
+            }
+    });
+
     app.post('/api/appointment', 
         verifyToken,
         validateRequest('createAppointment'), 
@@ -144,15 +179,15 @@ const routes = db => {
                 return res.status(400).json({ errors: errors.array() });
             }
             
-            const { user_id, comments, appointment_start_date, appointment_end_date } = req.body;
+            const { user_id, comments, start_date, end_date } = req.body;
             const values = [
                 user_id,
                 comments,
-                appointment_start_date, 
-                appointment_end_date
+                moment(start_date).utc().format('YYYY-MM-DD HH:mm:ss'), // Convert ISO to datetime
+                moment(end_date).utc().format('YYYY-MM-DD HH:mm:ss')
             ];
 
-            db.run('INSERT INTO appointments (user_id, comments, appointment_start_date, appointment_end_date) \
+            db.run('INSERT INTO appointments (user_id, comments, start_date, end_date) \
                 VALUES (?, ?, ?, ?)', values, (err) => {
                     if (err) return res.sendStatus(500);
 
@@ -171,7 +206,7 @@ const routes = db => {
             }
             
             const requestId = req.params.id;
-            const { comments, appointment_start_date, appointment_end_date } = req.body;
+            const { comments, start_date, end_date } = req.body;
 
             db.all('SELECT * FROM appointments WHERE appointment_id = ?', requestId, (err, appointment) => {
                 if (err) return res.sendStatus(500);
@@ -184,16 +219,16 @@ const routes = db => {
 
                 const values = [
                     comments,
-                    appointment_start_date,
-                    appointment_end_date,
+                    start_date,
+                    end_date,
                     requestId
                 ];
 
-                db.run('UPDATE appointments SET comments = ?, appointment_start_date = ?, appointment_end_date = ? \
+                db.run('UPDATE appointments SET comments = ?, start_date = ?, end_date = ? \
                     WHERE appointment_id = ?', values, (err) => {
                     if (err) res.sendStatus(500);
 
-                    db.all('SELECT appointment_id, comments, appointment_start_date, appointment_end_date \
+                    db.all('SELECT appointment_id, comments, start_date, end_date \
                         FROM appointments', (err, appointment) => {
                             if (err) return res.sendStatus(500);
                 
