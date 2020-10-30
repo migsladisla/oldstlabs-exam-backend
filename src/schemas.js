@@ -8,7 +8,8 @@ module.exports = (db) => {
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            token_version INTEGER DEFAULT 0
         );
 
         CREATE TABLE appointments

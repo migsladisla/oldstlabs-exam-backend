@@ -1,7 +1,8 @@
 'use strict';
+
 require('dotenv').config()
 
-const port = process.env.PORT;
+const port = parseInt(process.env.PORT || 8010);
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database(':memory:');
 const buildSchemas = require('./src/schemas');
