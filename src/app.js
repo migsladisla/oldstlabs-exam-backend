@@ -7,6 +7,8 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const sendRefreshToken = require('./jwt/sendRefreshToken');
+const validateRequest = require('./validationMiddleware');
+const { validationResult } = require('express-validator');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('./jwt/auth');
 
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -20,11 +22,11 @@ const routes = db => {
 
         if (!refreshToken) return res.sendStatus(401);
 
-        try {
-            // Verify refresh token
-            const payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+        // Verify refresh token
+        jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, decoded) => {
+            if (err) return res.sendStatus(403);
 
-            db.all('SELECT user_id, token_version FROM users WHERE user_id = ?', payload.userId, (err, user) => {
+            db.all('SELECT user_id, token_version FROM users WHERE user_id = ?', decoded.userId, (err, user) => {
                 if (err) return res.sendStatus(500);
 
                 // Create new refresh token
@@ -33,20 +35,18 @@ const routes = db => {
 
                 return res.json({ accessToken: newAccessToken });
             });
-        } catch(err) {
-            return res.sendStatus(403);
-        }
+        });
     });
 
-    app.post('/api/register', (req, res) => {
+    app.post('/api/register', validateRequest('register'), (req, res) => {
+        const errors = validationResult(req);
+
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
         const saltRounds = 10;
-        const plainPassword = req.body.password;
-        const email = req.body.email;
-        let userCredentials = [
-            req.body.first_name,
-            req.body.last_name,
-            email
-        ];
+        const { first_name, last_name, password, email } = req.body;
 
         // Check if email exists
         db.all('SELECT email FROM users WHERE email = ?', email, (err, user) => {
@@ -59,8 +59,13 @@ const routes = db => {
             }
 
             // Hash pw
-            bcrypt.hash(plainPassword, saltRounds).then((hashedPassword) => {
-                userCredentials.push(hashedPassword);
+            bcrypt.hash(password, saltRounds).then((hashedPassword) => {
+                const userCredentials = [
+                    first_name,
+                    last_name,
+                    email,
+                    hashedPassword
+                ];
                 
                 // Register user
                 db.run('INSERT INTO users (first_name, last_name, email, password) \
@@ -75,9 +80,14 @@ const routes = db => {
         });
     });
 
-    app.post('/api/login', (req, res) => {
-        const email = req.body.email;
-        const password = req.body.password;
+    app.post('/api/login', validateRequest('login'), (req, res) => {
+        const errors = validationResult(req);
+
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { email, password } = req.body;
 
         db.all('SELECT user_id, password, token_version FROM users WHERE email = ?', email, async (err, user) => {
             if (err) return res.sendStatus(500);
@@ -111,10 +121,9 @@ const routes = db => {
         });
     });
 
-    app.delete('/api/logout', (res) => {
+    app.delete('/api/logout', (req, res) => {
         sendRefreshToken(res, '');
-
-        return true;
+        res.sendStatus(204);
     });
 
     app.get('/api/appointments', (req, res) => {
@@ -125,58 +134,92 @@ const routes = db => {
         });
     });
 
-    app.post('/api/appointment', verifyToken, (req, res) => {
-        var values = [
-            req.body.user_id,
-            req.body.comments,
-            req.body.appointment_start_date, 
-            req.body.appointment_end_date
-        ];
-
-        db.run('INSERT INTO appointments (user_id, comments, appointment_start_date, appointment_end_date) \
-            VALUES (?, ?, ?, ?)', values, (err) => {
-                if (err) return res.sendStatus(500);
-
-                return res.json({ message: 'Successfully booked an appointment' });
-        });
-    });
-
-    app.put('/api/appointment/:id', verifyToken, (req, res) => {
-        const requestId = req.params.id;
-
-        db.all('SELECT * FROM appointments WHERE appointment_id = ?', requestId, (err, appointment) => {
-            if (err) return res.sendStatus(500);
-
-            if (appointment.length === 0) {
-                return res.status(404).json({
-                    message: 'Appointment not found'
-                });
+    app.post('/api/appointment', 
+        verifyToken,
+        validateRequest('createAppointment'), 
+        (req, res) => {
+            const errors = validationResult(req);
+    
+            if (!errors.isEmpty()) {
+                return res.status(400).json({ errors: errors.array() });
             }
-
+            
+            const { user_id, comments, appointment_start_date, appointment_end_date } = req.body;
             const values = [
-                req.body.comments,
-                req.body.appointment_start_date,
-                req.body.appointment_end_date,
-                requestId
+                user_id,
+                comments,
+                appointment_start_date, 
+                appointment_end_date
             ];
 
-            db.run('UPDATE appointments SET comments = ?, appointment_start_date = ?, appointment_end_date = ? \
-                WHERE appointment_id = ?', values, (err) => {
-                if (err) res.sendStatus(500);
-                
-                return res.json(appointment);
+            db.run('INSERT INTO appointments (user_id, comments, appointment_start_date, appointment_end_date) \
+                VALUES (?, ?, ?, ?)', values, (err) => {
+                    if (err) return res.sendStatus(500);
+
+                    return res.json({ message: 'Successfully booked an appointment' });
             });
-        });
     });
 
-    app.delete('/api/appointment/:id', verifyToken, (req, res) => {
-        const requestId = req.params.id;
-
-        db.all('DELETE FROM appointments WHERE appointment_id = ?', requestId, (err, appointment) => {
-            if (err) return res.sendStatus(500);
+    app.put('/api/appointment/:id', 
+        verifyToken, 
+        validateRequest('editAppointment'),
+        (req, res) => {
+            const errors = validationResult(req);
+    
+            if (!errors.isEmpty()) {
+                return res.status(400).json({ errors: errors.array() });
+            }
             
-            return res.json({ message: 'Appointment deleted'});
-        });
+            const requestId = req.params.id;
+            const { comments, appointment_start_date, appointment_end_date } = req.body;
+
+            db.all('SELECT * FROM appointments WHERE appointment_id = ?', requestId, (err, appointment) => {
+                if (err) return res.sendStatus(500);
+
+                if (appointment.length === 0) {
+                    return res.status(404).json({
+                        message: 'Appointment not found'
+                    });
+                }
+
+                const values = [
+                    comments,
+                    appointment_start_date,
+                    appointment_end_date,
+                    requestId
+                ];
+
+                db.run('UPDATE appointments SET comments = ?, appointment_start_date = ?, appointment_end_date = ? \
+                    WHERE appointment_id = ?', values, (err) => {
+                    if (err) res.sendStatus(500);
+
+                    db.all('SELECT appointment_id, comments, appointment_start_date, appointment_end_date \
+                        FROM appointments', (err, appointment) => {
+                            if (err) return res.sendStatus(500);
+                
+                            return res.json(appointment[0]);
+                    });
+                });
+            });
+    });
+
+    app.delete('/api/appointment/:id', 
+        verifyToken, 
+        validateRequest('deleteAppointment'),
+        (req, res) => {
+            const errors = validationResult(req);
+    
+            if (!errors.isEmpty()) {
+                return res.status(400).json({ errors: errors.array() });
+            }
+            
+            const requestId = req.params.id;
+
+            db.all('DELETE FROM appointments WHERE appointment_id = ?', requestId, (err, appointment) => {
+                if (err) return res.sendStatus(500);
+                
+                return res.json({ message: 'Appointment deleted'});
+            });
     });
 
     return app;
