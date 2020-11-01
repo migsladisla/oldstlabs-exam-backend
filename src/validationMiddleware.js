@@ -40,7 +40,6 @@ const validateRequest = (method) => {
                 body('user_id').isInt().withMessage('user_id must be a number'),
                 body('comments').not().isEmpty().isLength({ max: 250 }).withMessage('Comment is 250 characters max'),
                 body('start_date').custom(value => {
-                    console.log(value)
                     if (!moment(value, "YYYY-MM-DDTHH:mm:ss", true).isValid()) {
                         throw new Error('Date must be in ISO 8601 format');
                     }
