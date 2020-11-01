@@ -148,10 +148,7 @@ const routes = db => {
             let { start, end } = req.query;
 
             if (typeof start !== 'undefined' && typeof end !== 'undefined') {
-                const range = [
-                    moment(start).utc().format('YYYY-MM-DD HH:mm:ss'),
-                    moment(end).utc().format('YYYY-MM-DD HH:mm:ss')
-                ]
+                const range = [start, end];
 
                 db.all('SELECT * FROM appointments WHERE start_date >= ? and end_date <= ?', 
                     range, 
