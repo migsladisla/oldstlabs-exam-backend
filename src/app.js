@@ -1,12 +1,12 @@
 'use strict';
 
 const express = require('express');
+const cors = require('cors')
 const app = express();
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const moment = require('moment');
 const sendRefreshToken = require('./jwt/sendRefreshToken');
 const validateRequest = require('./validationMiddleware');
 const { validationResult } = require('express-validator');
@@ -15,11 +15,15 @@ const { generateAccessToken, generateRefreshToken, verifyToken } = require('./jw
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
+app.use(cors())
 
 const routes = db => {
     app.post('/api/refresh_token', (req, res) => {
         // Check the refresh token stored in the req cookie
-        const refreshToken = req.cookies.jid;
+        const { refreshToken } = req.body; // For seprate client
+
+        // For postman
+        // const refreshToken = req.cookies.jid;
 
         if (!refreshToken) return res.sendStatus(401);
 
@@ -31,10 +35,14 @@ const routes = db => {
                 if (err) return res.sendStatus(500);
 
                 // Create new refresh token
-                sendRefreshToken(res, generateRefreshToken(user[0]));
+                const newRefreshToken = generateRefreshToken(user[0]);
+                sendRefreshToken(res, newRefreshToken);
                 const newAccessToken = generateAccessToken(user[0]);
 
-                return res.json({ accessToken: newAccessToken });
+                return res.json({ 
+                    accessToken: newAccessToken,
+                    refreshToken: newRefreshToken
+                });
             });
         });
     });
@@ -94,7 +102,7 @@ const routes = db => {
             if (err) return res.sendStatus(500);
 
             if (user.length === 0) {
-                return res.status(401).json({
+                return res.status(400).json({
                     message: 'Invalid credentials'
                 });
             }
@@ -111,13 +119,15 @@ const routes = db => {
             
             // Generate access token valid for 15m
             const accessToken = generateAccessToken(user[0]);
+            const refreshToken = generateRefreshToken(user[0]);
 
             // Generate refresh token valid for 7d
-            sendRefreshToken(res, generateRefreshToken(user[0]));
+            sendRefreshToken(res, refreshToken);
 
             return res.json({
                 message: 'Logged in successfully',
-                accessToken
+                accessToken,
+                refreshToken
             });
         });
     });
@@ -148,9 +158,10 @@ const routes = db => {
             let { start, end } = req.query;
 
             if (typeof start !== 'undefined' && typeof end !== 'undefined') {
-                const range = [start, end];
+                const range = [start, end, req.payload.userId];
 
-                db.all('SELECT * FROM appointments WHERE start_date >= ? and end_date <= ?', 
+                db.all('SELECT * FROM appointments WHERE start_date >= ? AND end_date <= ? \
+                    AND user_id = ?', 
                     range, 
                     (err, appointments) => {
                         if (err) return res.sendStatus(500);
@@ -166,6 +177,20 @@ const routes = db => {
             }
     });
 
+    app.get('/api/appointment/:id',
+        verifyToken,
+        (req, res) => {
+            const values = [req.params.id, req.payload.userId];
+
+            db.all('SELECT * FROM appointments WHERE appointment_id = ? AND user_id = ?', 
+                values, 
+                (err, appointment) => {
+                    if (err) return res.sendStatus(500);
+
+                    return res.json(appointment);
+            });
+    });
+
     app.post('/api/appointment', 
         verifyToken,
         validateRequest('createAppointment'), 
@@ -176,12 +201,12 @@ const routes = db => {
                 return res.status(400).json({ errors: errors.array() });
             }
             
-            const { user_id, comments, start_date, end_date } = req.body;
+            const { comments, start_date, end_date } = req.body;
             const values = [
-                user_id,
+                req.payload.userId,
                 comments,
-                moment(start_date).utc().format('YYYY-MM-DD HH:mm:ss'), // Convert ISO to datetime
-                moment(end_date).utc().format('YYYY-MM-DD HH:mm:ss')
+                start_date.replace('T', ' '),
+                end_date.replace('T', ' ')
             ];
 
             db.run('INSERT INTO appointments (user_id, comments, start_date, end_date) \
@@ -236,8 +261,7 @@ const routes = db => {
     });
 
     app.delete('/api/appointment/:id', 
-        verifyToken, 
-        validateRequest('deleteAppointment'),
+        verifyToken,
         (req, res) => {
             const errors = validationResult(req);
     

@@ -37,8 +37,7 @@ const validateRequest = (method) => {
         }
         case 'createAppointment': {
             return [
-                body('user_id').isInt().withMessage('user_id must be a number'),
-                body('comments').not().isEmpty().isLength({ max: 250 }).withMessage('Comment is 250 characters max'),
+                body('comments').not().isEmpty().withMessage('Comment field is required').isLength({ max: 250 }).withMessage('Comment is 250 characters max'),
                 body('start_date').custom(value => {
                     if (!moment(value, "YYYY-MM-DDTHH:mm:ss", true).isValid()) {
                         throw new Error('Date must be in ISO 8601 format');
@@ -57,12 +56,21 @@ const validateRequest = (method) => {
         }
         case 'editAppointment': {
             return [
-                body('comments').not().isEmpty().isLength({ max: 250 }).withMessage('Comment is 250 characters max')
-            ]
-        }
-        case 'deleteAppointment': {
-            return [
-                body('user_id').isInt().withMessage('user_id must be a number')
+                body('comments').not().isEmpty().withMessage('Comment field is required').isLength({ max: 250 }).withMessage('Comment is 250 characters max'),
+                body('start_date').custom(value => {
+                    if (!moment(value, "YYYY-MM-DDTHH:mm:ss", true).isValid()) {
+                        throw new Error('Date must be in ISO 8601 format');
+                    }
+                    
+                    return true;
+                }),
+                body('end_date').custom(value => {
+                    if (!moment(value, "YYYY-MM-DDTHH:mm:ss", true).isValid()) {
+                        throw new Error('Date must be in ISO 8601 format');
+                    }
+                    
+                    return true;
+                })
             ]
         }
     }
