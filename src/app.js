@@ -1,7 +1,10 @@
 'use strict';
 
 const express = require('express');
-const cors = require('cors')
+const cors = require('cors');
+const helmet = require('helmet');
+const xss = require('xss-clean');
+const hpp = require('hpp');
 const app = express();
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
@@ -9,13 +12,26 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const sendRefreshToken = require('./jwt/sendRefreshToken');
 const validateRequest = require('./validationMiddleware');
+
 const { validationResult } = require('express-validator');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('./jwt/auth');
+
+// Security headers
+app.use(helmet());
+
+// Prevent XSS attacks
+app.use(xss());
+
+// Prevent http param pollution
+app.use(hpp());
+
+// Middleware for API rate limiting (max 5 / day)
+const rateLimiter = require('./rateLimiter');
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
-app.use(cors())
+app.use(cors());
 
 const routes = db => {
     app.post('/api/refresh_token', (req, res) => {
@@ -31,7 +47,7 @@ const routes = db => {
         jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, decoded) => {
             if (err) return res.sendStatus(403);
 
-            db.all('SELECT user_id, token_version FROM users WHERE user_id = ?', decoded.userId, (err, user) => {
+            db.all('SELECT user_id FROM users WHERE user_id = ?', decoded.userId, (err, user) => {
                 if (err) return res.sendStatus(500);
 
                 // Create new refresh token
@@ -98,7 +114,7 @@ const routes = db => {
 
         const { email, password } = req.body;
 
-        db.all('SELECT user_id, password, token_version FROM users WHERE email = ?', email, async (err, user) => {
+        db.all('SELECT * FROM users WHERE email = ?', email, async (err, user) => {
             if (err) return res.sendStatus(500);
 
             if (user.length === 0) {
@@ -126,6 +142,7 @@ const routes = db => {
 
             return res.json({
                 message: 'Logged in successfully',
+                name: `${user[0].first_name} ${user[0].last_name}`,
                 accessToken,
                 refreshToken
             });
@@ -161,7 +178,7 @@ const routes = db => {
                 const range = [start, end, req.payload.userId];
 
                 db.all('SELECT * FROM appointments WHERE start_date >= ? AND end_date <= ? \
-                    AND user_id = ?', 
+                    AND user_id = ? ORDER BY appointment_id DESC', 
                     range, 
                     (err, appointments) => {
                         if (err) return res.sendStatus(500);
@@ -169,10 +186,11 @@ const routes = db => {
                         return res.json(appointments);
                 });
             } else {
-                db.all('SELECT * FROM appointments', (err, appointments) => {
-                    if (err) return res.sendStatus(500);
-    
-                    return res.json(appointments);
+                db.all('SELECT * FROM appointments WHERE user_id = ? ORDER BY \
+                    appointment_id DESC', req.payload.userId, (err, appointments) => {
+                        if (err) return res.sendStatus(500);
+        
+                        return res.json(appointments);
                 });
             }
     });
@@ -193,6 +211,7 @@ const routes = db => {
 
     app.post('/api/appointment', 
         verifyToken,
+        rateLimiter,
         validateRequest('createAppointment'), 
         (req, res) => {
             const errors = validationResult(req);
@@ -241,8 +260,8 @@ const routes = db => {
 
                 const values = [
                     comments,
-                    start_date,
-                    end_date,
+                    start_date.replace('T', ' '),
+                    end_date.replace('T', ' '),
                     requestId
                 ];
 
