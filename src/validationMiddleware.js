@@ -13,8 +13,7 @@ const validateRequest = (method) => {
         }
         case 'login': {
             return [
-                body('email').isEmail().withMessage('Email must be a valid email address'),
-                body('password').isLength({ min: 6 }).withMessage('Password must be atleast 6 characters long')
+                body('email').isEmail().withMessage('Email must be a valid email address')
             ]
         }
         case 'userAppointments': {
