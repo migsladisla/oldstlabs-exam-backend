@@ -8,7 +8,7 @@ This is the API/backend of the booking system application.
 2. Run `npm start`
 3. Hit `localhost:8010/api/register` to get started
 
-You can view the documentation [below](#api-documentation)
+You can view the documentation below
 
 ### Tools/Packages Used
 
@@ -20,4 +20,4 @@ You can view the documentation [below](#api-documentation)
 
 ### API Documentation
 
-You can view the documentation by clicking this [link]https://documenter.getpostman.com/view/7664978/TVYNXusp
+You can view the documentation by clicking this [link](https://documenter.getpostman.com/view/7664978/TVYNXusp)
