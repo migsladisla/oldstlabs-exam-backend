@@ -8,7 +8,7 @@ This is the API/backend of the booking system application.
 2. Run `npm start`
 3. Hit `localhost:8010/api/register` to get started
 
-You can view the documentation [below](#API Documentation)
+You can view the documentation [below](#api-documentation)
 
 ### Tools/Packages Used
 
