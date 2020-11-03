@@ -1,4 +1,4 @@
-# Old St. Labs Technical Exam
+# Old St. Labs Technical Exam - Backend
 
 This is the API/backend of the booking system application.
 
